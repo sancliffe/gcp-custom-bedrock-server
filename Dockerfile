@@ -19,9 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a dedicated non-root system user and group for security hardening
-RUN groupadd -g 1000 minecraft && \
-    useradd -u 1000 -g minecraft -m -s /bin/bash minecraft
+# Create a dedicated non-root system user and group (safely handles pre-existing IDs)
+RUN if ! getent group 1000 > /dev/null; then groupadd -g 1000 minecraft; fi && \
+    if ! getent passwd 1000 > /dev/null; then useradd -u 1000 -g 1000 -m -s /bin/bash minecraft; fi
 
 # Create application and persistent data directories with proper permissions
 RUN mkdir -p /opt/minecraft/server /data && \
