@@ -3,6 +3,13 @@ name: Build and Push Custom Bedrock Image
 on:
   push:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      bds_version:
+        description: 'Minecraft Bedrock Server Version (e.g., latest or specific version)'
+        required: true
+        default: 'latest'
+        type: string
 
 jobs:
   build-and-push:
@@ -20,9 +27,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push Image
+      - name: Build and Push Custom Bedrock Image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: superflea2828/gcp-custom-bedrock-server:latest
+          tags: |
+            superflea2828/gcp-custom-bedrock-server:latest
+            superflea2828/gcp-custom-bedrock-server:${{ github.sha }}
+          build-args: |
+            BDS_VERSION=${{ github.event.inputs.bds_version || 'latest' }}

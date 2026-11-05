@@ -1,10 +1,16 @@
 FROM ubuntu:24.04
 
-# Prevent interactive prompts during package installation
+LABEL maintainer="steve@steanlabs.com"
+LABEL description="Production-hardened custom Minecraft Bedrock Dedicated Server for GCP"
+
+# Prevent interactive prompts during apt installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Build arguments for pinned version reproducibility (defaults to latest if unset)
+ARG BDS_VERSION=latest
+
 # Install runtime dependencies required by Mojang's native Bedrock binary
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
     libcurl4 \
@@ -12,55 +18,46 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Create working and data directories
-WORKDIR /opt/minecraft
-RUN mkdir -p /data /opt/minecraft
+# Create a dedicated non-root system user and group for security hardening
+RUN groupadd -g 1000 minecraft && \
+    useradd -u 1000 -g minecraft -m -s /bin/bash minecraft
+
+# Create application and persistent data directories with proper permissions
+RUN mkdir -p /opt/minecraft/server /data && \
+    chown -R minecraft:minecraft /opt/minecraft /data
 
 # Download and extract the official Linux Bedrock Dedicated Server binary
-# (Using User-Agent header as Mojang blocks default curl requests)
-RUN BDS_URL=$(curl -s -H "Accept-Encoding: identity" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1) \
-    && echo "Downloading from: ${BDS_URL}" \
-    && curl -s -H "User-Agent: Mozilla/5.0" -o bedrock-server.zip "${BDS_URL}" \
-    && unzip bedrock-server.zip -d /opt/minecraft/server \
-    && rm bedrock-server.zip
+# If BDS_VERSION is 'latest', scrape the official download page; otherwise use the pinned version URL
+RUN if [ "${BDS_VERSION}" = "latest" ]; then \
+        BDS_URL=$(curl -s -H "Accept-Encoding: identity" -H "User-Agent: Mozilla/5.0" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1); \
+    else \
+        BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${BDS_VERSION}.zip"; \
+    fi \
+    && echo "Downloading Bedrock Server from: ${BDS_URL}" \
+    && curl -s -H "User-Agent: Mozilla/5.0" -o /tmp/bedrock-server.zip "${BDS_URL}" \
+    && unzip /tmp/bedrock-server.zip -d /opt/minecraft/server \
+    && rm /tmp/bedrock-server.zip
+
+# Copy entrypoint script and set executable permissions
+COPY start.sh /opt/minecraft/start.sh
+RUN chmod +x /opt/minecraft/start.sh && \
+    chown -R minecraft:minecraft /opt/minecraft
 
 # Set up volume for persistent world data and configurations
 VOLUME ["/data"]
 WORKDIR /opt/minecraft/server
 
-# Expose ports required for Bedrock and NetherNet
+# Expose ports required for Bedrock gameplay and NetherNet signaling
 EXPOSE 19132/tcp
 EXPOSE 19132/udp
 EXPOSE 19133/udp
 EXPOSE 19140-19150/udp
 
-# Entrypoint script to handle configuration symlinking and launch the server
-COPY <<'EOF' /opt/minecraft/start.sh
-#!/bin/bash
-# Link persistent data directory files if they don't exist yet
-if [ ! -f /data/server.properties ]; then
-    cp /opt/minecraft/server/server.properties /data/server.properties
-fi
-if [ ! -f /data/permissions.json ]; then
-    cp /opt/minecraft/server/permissions.json /data/permissions.json
-fi
-if [ ! -f /data/allowlist.json ]; then
-    cp /opt/minecraft/server/allowlist.json /data/allowlist.json
-fi
+# Switch to unprivileged non-root user
+USER minecraft:minecraft
 
-# Point the server config to the persistent volume
-rm -f /opt/minecraft/server/server.properties
-rm -rf /opt/minecraft/server/worlds
-ln -s /data/server.properties /opt/minecraft/server/server.properties
-ln -s /data/worlds /opt/minecraft/server/worlds
-ln -s /data/allowlist.json /opt/minecraft/server/allowlist.json
-ln -s /data/permissions.json /opt/minecraft/server/permissions.json
+# Add native container healthcheck verifying server process/port availability
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD nc -z -u 127.0.0.1 19132 || exit 1
 
-# Launch Bedrock server with proper library path
-export LD_LIBRARY_PATH=/opt/minecraft/server
-exec ./bedrock_server
-EOF
-
-RUN chmod +x /opt/minecraft/start.sh
-
-CMD ["/opt/minecraft/start.sh"]
+ENTRYPOINT ["/opt/minecraft/start.sh"]
