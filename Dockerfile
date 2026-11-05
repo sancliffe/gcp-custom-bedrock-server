@@ -27,18 +27,22 @@ RUN groupadd -g 999 minecraft && \
 RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
-# Download and extract the official Linux Bedrock Dedicated Server binary with a guaranteed version fallback
+# Download and extract the official Linux Bedrock Dedicated Server binary with robust error checking
 RUN if [ "${BDS_VERSION}" = "latest" ]; then \
-        BDS_URL=$(curl -s -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1); \
-        if [ -z "${BDS_URL}" ]; then \
-            echo "Scraping blocked, using pinned stable release version fallback..."; \
-            BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-1.21.51.01.zip"; \
-        fi; \
+        # Attempt to scrape the latest Linux download URL from Mojang's page
+        BDS_URL=$(curl -s -L -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1); \
     else \
         BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${BDS_VERSION}.zip"; \
-    fi \
-    && echo "Downloading Bedrock Server from: ${BDS_URL}" \
-    && curl -f -s -L -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -o /tmp/bedrock-server.zip "${BDS_URL}" \
+    fi; \
+    \
+    # Fallback check if scraping comes up empty
+    if [ -z "${BDS_URL}" ]; then \
+        echo "Error: Could not dynamically resolve the Bedrock server download URL."; \
+        exit 1; \
+    fi; \
+    \
+    echo "Downloading Bedrock Server from: ${BDS_URL}"; \
+    curl -f -s -L -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -o /tmp/bedrock-server.zip "${BDS_URL}" \
     && unzip /tmp/bedrock-server.zip -d /opt/minecraft/server \
     && rm /tmp/bedrock-server.zip
 
