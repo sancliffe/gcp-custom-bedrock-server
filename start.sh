@@ -1,13 +1,18 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 SERVER_DIR="/opt/minecraft/server"
+DEFAULTS_DIR="/opt/minecraft/defaults"
 DATA_DIR="/data"
 
-# Initialize configuration and world files on persistent volume if missing
+# Initialize configuration files on persistent volume if missing, using safe defaults
 for file in server.properties permissions.json allowlist.json; do
-    if [ ! -f "${DATA_DIR}/${file}" ] && [ -f "${SERVER_DIR}/${file}" ]; then
-        cp "${SERVER_DIR}/${file}" "${DATA_DIR}/${file}"
+    if [ ! -f "${DATA_DIR}/${file}" ]; then
+        if [ -f "${DEFAULTS_DIR}/${file}" ]; then
+            cp "${DEFAULTS_DIR}/${file}" "${DATA_DIR}/${file}"
+        elif [ -f "${SERVER_DIR}/${file}" ]; then
+            cp "${SERVER_DIR}/${file}" "${DATA_DIR}/${file}"
+        fi
     fi
 done
 
@@ -18,7 +23,9 @@ fi
 # Link configuration files and worlds directory to persistent volume
 for file in server.properties allowlist.json permissions.json; do
     rm -f "${SERVER_DIR}/${file}"
-    ln -s "${DATA_DIR}/${file}" "${SERVER_DIR}/${file}"
+    if [ -f "${DATA_DIR}/${file}" ]; then
+        ln -s "${DATA_DIR}/${file}" "${SERVER_DIR}/${file}"
+    fi
 done
 
 rm -rf "${SERVER_DIR}/worlds"
@@ -33,7 +40,7 @@ term_handler() {
         echo "Received SIGTERM. Saving world and shutting down Bedrock server gracefully..."
         kill -SIGTERM "$pid"
         wait "$pid"
-    }
+    fi
     exit 0
 }
 
