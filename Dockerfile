@@ -8,7 +8,7 @@ LABEL description="Hardened Minecraft Bedrock Dedicated Server for GCP"
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Pin the Bedrock Dedicated Server version for reproducible builds.
-ARG BDS_VERSION=1.21.50.01
+ARG BDS_VERSION=1.26.62.1
 
 # Runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
