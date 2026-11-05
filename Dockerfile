@@ -1,76 +1,103 @@
+
 FROM ubuntu:24.04
 
 LABEL maintainer="steve@steanlabs.com"
-LABEL description="Production-hardened custom Minecraft Bedrock Dedicated Server for GCP"
+LABEL description="Hardened Minecraft Bedrock Dedicated Server for GCP"
 
-# Prevent interactive prompts during apt installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Build arguments for pinned version reproducibility (defaults to latest if unset)
+# Build configuration
+ARG DEBIAN_FRONTEND=noninteractive
 ARG BDS_VERSION=latest
+# Supply explicitly if you want a fallback when Mojang's page cannot be parsed.
+ARG BDS_FALLBACK_VERSION=""
 
-# Install runtime dependencies and netcat for container healthchecks
+# Runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
     libcurl4 \
     libssl3 \
+    libstdc++6 \
+    libgcc-s1 \
+    libatomic1 \
+    zlib1g \
     ca-certificates \
-    netcat-openbsd \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a dedicated non-root system user and group with a clean unreserved ID (999)
+# Dedicated non-root account
 RUN groupadd -g 999 minecraft && \
-    useradd -u 999 -g minecraft -m -s /bin/bash minecraft
+    useradd -u 999 -g minecraft -m -s /usr/sbin/nologin minecraft
 
-# Create application and persistent data directories with proper numeric ownership
+# Application directories
 RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
-# Download and extract the official Linux Bedrock Dedicated Server binary with robust error checking
-RUN if [ "${BDS_VERSION}" = "latest" ]; then \
-        # Attempt to scrape the latest Linux download URL from Mojang's page
-        BDS_URL=$(curl -s -L -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1); \
+# Download and install official Bedrock Dedicated Server
+RUN set -eu; \
+    BDS_URL=""; \
+    if [ "${BDS_VERSION}" = "latest" ]; then \
+        echo "Resolving latest Bedrock Dedicated Server version..."; \
+        if curl -f -s -L \
+            --retry 3 \
+            --connect-timeout 15 \
+            --max-time 120 \
+            -H "User-Agent: Mozilla/5.0" \
+            -o /tmp/bedrock-download.html \
+            "https://www.minecraft.net/en-us/download/server/bedrock"; then \
+            BDS_URL="$(grep -Eo 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^\"[:space:]]+' /tmp/bedrock-download.html | head -n 1 || true)"; \
+        fi; \
+        if [ -z "${BDS_URL}" ]; then \
+            if [ -z "${BDS_FALLBACK_VERSION}" ]; then \
+                echo "ERROR: Unable to resolve latest BDS version and no fallback configured."; \
+                exit 1; \
+            fi; \
+            echo "Using explicitly configured fallback: ${BDS_FALLBACK_VERSION}"; \
+            BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${BDS_FALLBACK_VERSION}.zip"; \
+        fi; \
     else \
         BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${BDS_VERSION}.zip"; \
     fi; \
-    \
-    # Fallback check if scraping comes up empty
-    if [ -z "${BDS_URL}" ]; then \
-        echo "Error: Could not dynamically resolve the Bedrock server download URL."; \
-        exit 1; \
-    fi; \
-    \
-    echo "Downloading Bedrock Server from: ${BDS_URL}"; \
-    curl -f -s -L -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -o /tmp/bedrock-server.zip "${BDS_URL}" \
-    && unzip /tmp/bedrock-server.zip -d /opt/minecraft/server \
-    && rm /tmp/bedrock-server.zip
+    echo "Downloading: ${BDS_URL}"; \
+    curl -f -s -L \
+        --retry 3 \
+        --connect-timeout 15 \
+        --max-time 300 \
+        -H "User-Agent: Mozilla/5.0" \
+        -o /tmp/bedrock-server.zip \
+        "${BDS_URL}"; \
+    unzip -tq /tmp/bedrock-server.zip; \
+    unzip -q /tmp/bedrock-server.zip -d /opt/minecraft/server; \
+    rm -f /tmp/bedrock-server.zip /tmp/bedrock-download.html; \
+    chown -R 999:999 /opt/minecraft/server
 
-# Copy configuration templates safely and set ownership to minecraft user
-COPY server.properties /opt/minecraft/server/server.properties
-RUN echo '[]' > /opt/minecraft/server/allowlist.json && \
-    chown 999:999 /opt/minecraft/server/server.properties /opt/minecraft/server/allowlist.json
+# Configuration
+COPY --chown=999:999 server.properties /opt/minecraft/server/server.properties
 
-# Copy entrypoint script and set executable permissions & ownership
-COPY start.sh /opt/minecraft/start.sh
-RUN chmod +x /opt/minecraft/start.sh && \
-    chown 999:999 /opt/minecraft/start.sh
+RUN printf '[]\n' > /opt/minecraft/server/allowlist.json && \
+    chown 999:999 /opt/minecraft/server/allowlist.json
 
-# Set up volume for persistent world data and configurations
+# Entrypoint
+COPY --chown=999:999 start.sh /opt/minecraft/start.sh
+
+RUN chmod 755 /opt/minecraft/start.sh
+
+# Persistent world data
 VOLUME ["/data"]
+
 WORKDIR /opt/minecraft/server
 
-# Expose ports required for Bedrock gameplay and NetherNet signaling
-EXPOSE 19132/tcp
+# Bedrock networking
 EXPOSE 19132/udp
 EXPOSE 19133/udp
+EXPOSE 19132/tcp
 EXPOSE 19140-19150/udp
 
-# Switch to unprivileged non-root user (using numeric ID for maximum reliability)
+# Non-root execution
 USER 999:999
 
-# Add native container healthcheck verifying server process/port availability
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD nc -z -u 127.0.0.1 19132 || exit 1
+# Process health check.
+# This verifies the server process exists, not that clients can connect.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD pgrep -x bedrock_server >/dev/null || exit 1
 
 ENTRYPOINT ["/opt/minecraft/start.sh"]
