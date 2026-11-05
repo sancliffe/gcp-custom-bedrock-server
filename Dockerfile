@@ -19,13 +19,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a dedicated non-root system user and group (safely handles pre-existing IDs)
-RUN if ! getent group 1000 > /dev/null; then groupadd -g 1000 minecraft; fi && \
-    if ! getent passwd 1000 > /dev/null; then useradd -u 1000 -g 1000 -m -s /bin/bash minecraft; fi
+# Create a dedicated non-root system user and group with a clean unreserved ID (999)
+RUN groupadd -g 999 minecraft && \
+    useradd -u 999 -g minecraft -m -s /bin/bash minecraft
 
-# Create application and persistent data directories with proper permissions
+# Create application and persistent data directories with proper numeric ownership
 RUN mkdir -p /opt/minecraft/server /data && \
-    chown -R minecraft:minecraft /opt/minecraft /data
+    chown -R 999:999 /opt/minecraft /data
 
 # Download and extract the official Linux Bedrock Dedicated Server binary
 RUN if [ "${BDS_VERSION}" = "latest" ]; then \
@@ -38,14 +38,15 @@ RUN if [ "${BDS_VERSION}" = "latest" ]; then \
     && unzip /tmp/bedrock-server.zip -d /opt/minecraft/server \
     && rm /tmp/bedrock-server.zip
 
-# Copy configuration templates safely
+# Copy configuration templates safely and set ownership to minecraft user
 COPY server.properties /opt/minecraft/server/server.properties
-RUN echo '[]' > /opt/minecraft/server/allowlist.json
+RUN echo '[]' > /opt/minecraft/server/allowlist.json && \
+    chown 999:999 /opt/minecraft/server/server.properties /opt/minecraft/server/allowlist.json
 
-# Copy entrypoint script and set executable permissions
+# Copy entrypoint script and set executable permissions & ownership
 COPY start.sh /opt/minecraft/start.sh
 RUN chmod +x /opt/minecraft/start.sh && \
-    chown -R minecraft:minecraft /opt/minecraft
+    chown 999:999 /opt/minecraft/start.sh
 
 # Set up volume for persistent world data and configurations
 VOLUME ["/data"]
@@ -57,8 +58,8 @@ EXPOSE 19132/udp
 EXPOSE 19133/udp
 EXPOSE 19140-19150/udp
 
-# Switch to unprivileged non-root user
-USER minecraft:minecraft
+# Switch to unprivileged non-root user (using numeric ID for maximum reliability)
+USER 999:999
 
 # Add native container healthcheck verifying server process/port availability
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
