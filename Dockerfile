@@ -36,7 +36,6 @@ RUN groupadd --system --gid 999 minecraft && \
 RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
-# Download and extract the official Linux Bedrock Dedicated Server binary forcing HTTP/1.1 and robust retries
 # Copy local archive into the container instead of downloading over network
 COPY bedrock-server-1.26.62.1.zip /tmp/bedrock-server.zip
 
