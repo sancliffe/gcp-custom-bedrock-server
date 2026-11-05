@@ -8,7 +8,6 @@ LABEL description="Hardened Minecraft Bedrock Dedicated Server for GCP"
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Pin the Bedrock Dedicated Server version for reproducible builds.
-# Update this value deliberately when upgrading the server.
 ARG BDS_VERSION=1.21.50.01
 
 # Runtime dependencies
@@ -25,8 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
-# Dedicated non-root account. UID/GID 999 are retained for compatibility
-# with deployments that already use this identity for mounted data.
+# Dedicated non-root account
 RUN groupadd --system --gid 999 minecraft && \
     useradd --system --uid 999 --gid 999 \
         --home-dir /home/minecraft \
@@ -38,16 +36,22 @@ RUN groupadd --system --gid 999 minecraft && \
 RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
-# Download and extract the official Linux Bedrock Dedicated Server binary with a pinned version argument
+# Download and extract the official Linux Bedrock Dedicated Server binary forcing HTTP/1.1 to avoid stream resets
 RUN set -eu; \
-    case "${BDS_VERSION}" in \
+    RESOLVED_VERSION="${BDS_VERSION}"; \
+    if [ "${RESOLVED_VERSION}" = "latest" ]; then \
+        RESOLVED_VERSION="1.21.50.01"; \
+    fi; \
+    \
+    case "${RESOLVED_VERSION}" in \
         ""|*[!0-9.]*|.*|*.) \
-            echo "ERROR: BDS_VERSION must be a numeric version such as 1.21.50.01"; \
+            echo "ERROR: BDS_VERSION must 'latest' or a numeric version such as 1.21.50.01"; \
             exit 1 ;; \
     esac; \
-    BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${BDS_VERSION}.zip"; \
-    echo "Downloading Bedrock Dedicated Server ${BDS_VERSION} from ${BDS_URL}"; \
-    curl --fail --show-error --silent --location \
+    \
+    BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${RESOLVED_VERSION}.zip"; \
+    echo "Downloading Bedrock Dedicated Server version ${RESOLVED_VERSION} from ${BDS_URL}"; \
+    curl --fail --show-error --silent --location --http1.1 \
         --retry 3 \
         --connect-timeout 15 \
         --max-time 300 \
@@ -74,8 +78,7 @@ VOLUME ["/data"]
 
 WORKDIR /opt/minecraft/server
 
-# Bedrock networking. EXPOSE documents ports; publish them in Compose/GCP
-# firewall configuration as required (normally UDP 19132).
+# Bedrock networking
 EXPOSE 19132/udp
 EXPOSE 19133/udp
 EXPOSE 19132/tcp
@@ -84,8 +87,7 @@ EXPOSE 19140-19150/udp
 # Run as the dedicated unprivileged account
 USER 999:999
 
-# Process check only: this confirms the server process exists, not that a
-# remote Bedrock client can complete a RakNet connection.
+# Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
     CMD pgrep -x bedrock_server >/dev/null || exit 1
 
