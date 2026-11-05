@@ -32,8 +32,8 @@ RUN groupadd --system --gid 999 minecraft && \
         --shell /usr/sbin/nologin \
         minecraft
 
-# Application and persistent-data directories
-RUN mkdir -p /opt/minecraft/server /data && \
+# Application, defaults templates, and persistent-data directories
+RUN mkdir -p /opt/minecraft/server /opt/minecraft/defaults /data && \
     chown -R 999:999 /opt/minecraft /data
 
 # Copy local archive into the container instead of downloading over network
@@ -46,11 +46,11 @@ RUN set -eu; \
     chown -R 999:999 /opt/minecraft/server; \
     test -x /opt/minecraft/server/bedrock_server
 
-# Configuration
-COPY --chown=999:999 server.properties /opt/minecraft/server/server.properties
+# Configuration defaults stored separately for safe runtime initialization in /data
+COPY --chown=999:999 server.properties /opt/minecraft/defaults/server.properties
 
-RUN printf '[]\n' > /opt/minecraft/server/allowlist.json && \
-    chown 999:999 /opt/minecraft/server/allowlist.json
+RUN printf '[]\n' > /opt/minecraft/defaults/allowlist.json && \
+    chown 999:999 /opt/minecraft/defaults/allowlist.json
 
 # Entrypoint
 COPY --chown=999:999 start.sh /opt/minecraft/start.sh
