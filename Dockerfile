@@ -40,12 +40,12 @@ RUN mkdir -p /opt/minecraft/server /data && \
 RUN set -eu; \
     RESOLVED_VERSION="${BDS_VERSION}"; \
     if [ "${RESOLVED_VERSION}" = "latest" ]; then \
-        RESOLVED_VERSION="1.21.50.01"; \
+        RESOLVED_VERSION="1.26.62.1"; \
     fi; \
     \
     case "${RESOLVED_VERSION}" in \
         ""|*[!0-9.]*|.*|*.) \
-            echo "ERROR: BDS_VERSION must be 'latest' or a numeric version such as 1.21.50.01"; \
+            echo "ERROR: BDS_VERSION must be 'latest' or a numeric version such as 1.26.62.1"; \
             exit 1 ;; \
     esac; \
     \
