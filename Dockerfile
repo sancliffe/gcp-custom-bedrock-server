@@ -27,13 +27,12 @@ RUN groupadd -g 999 minecraft && \
 RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
-# Download and extract the official Linux Bedrock Dedicated Server binary via API/version endpoint
+# Download and extract the official Linux Bedrock Dedicated Server binary with a guaranteed version fallback
 RUN if [ "${BDS_VERSION}" = "latest" ]; then \
-        # Fetch the latest direct download URL from the official Minecraft client/server manifest or fallback pattern
         BDS_URL=$(curl -s -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1); \
         if [ -z "${BDS_URL}" ]; then \
-            echo "Scraping failed, fetching fallback latest release URL structure..."; \
-            BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-latest.zip"; \
+            echo "Scraping blocked, using pinned stable release version fallback..."; \
+            BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-1.21.51.01.zip"; \
         fi; \
     else \
         BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${BDS_VERSION}.zip"; \
