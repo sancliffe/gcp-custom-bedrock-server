@@ -37,28 +37,10 @@ RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
 # Download and extract the official Linux Bedrock Dedicated Server binary forcing HTTP/1.1 and robust retries
+# Copy local archive into the container instead of downloading over network
+COPY bedrock-server-1.26.62.1.zip /tmp/bedrock-server.zip
+
 RUN set -eu; \
-    RESOLVED_VERSION="${BDS_VERSION}"; \
-    if [ "${RESOLVED_VERSION}" = "latest" ]; then \
-        RESOLVED_VERSION="1.26.62.1"; \
-    fi; \
-    \
-    case "${RESOLVED_VERSION}" in \
-        ""|*[!0-9.]*|.*|*.) \
-            echo "ERROR: BDS_VERSION must be 'latest' or a numeric version such as 1.26.62.1"; \
-            exit 1 ;; \
-    esac; \
-    \
-    BDS_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${RESOLVED_VERSION}.zip"; \
-    echo "Downloading Bedrock Dedicated Server version ${RESOLVED_VERSION} from ${BDS_URL}"; \
-    curl --fail --show-error --silent --location --http1.1 \
-        --retry 3 \
-        --retry-delay 5 \
-        --retry-connrefused \
-        --connect-timeout 15 \
-        --max-time 300 \
-        --output /tmp/bedrock-server.zip \
-        "${BDS_URL}"; \
     unzip -tq /tmp/bedrock-server.zip; \
     unzip -q /tmp/bedrock-server.zip -d /opt/minecraft/server; \
     rm -f /tmp/bedrock-server.zip; \
