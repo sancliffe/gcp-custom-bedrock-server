@@ -36,7 +36,7 @@ RUN groupadd --system --gid 999 minecraft && \
 RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
-# Download and extract the official Linux Bedrock Dedicated Server binary forcing HTTP/1.1 to avoid stream resets
+# Download and extract the official Linux Bedrock Dedicated Server binary forcing HTTP/1.1 and robust retries
 RUN set -eu; \
     RESOLVED_VERSION="${BDS_VERSION}"; \
     if [ "${RESOLVED_VERSION}" = "latest" ]; then \
@@ -45,7 +45,7 @@ RUN set -eu; \
     \
     case "${RESOLVED_VERSION}" in \
         ""|*[!0-9.]*|.*|*.) \
-            echo "ERROR: BDS_VERSION must 'latest' or a numeric version such as 1.21.50.01"; \
+            echo "ERROR: BDS_VERSION must be 'latest' or a numeric version such as 1.21.50.01"; \
             exit 1 ;; \
     esac; \
     \
@@ -53,6 +53,8 @@ RUN set -eu; \
     echo "Downloading Bedrock Dedicated Server version ${RESOLVED_VERSION} from ${BDS_URL}"; \
     curl --fail --show-error --silent --location --http1.1 \
         --retry 3 \
+        --retry-delay 5 \
+        --retry-connrefused \
         --connect-timeout 15 \
         --max-time 300 \
         --output /tmp/bedrock-server.zip \
