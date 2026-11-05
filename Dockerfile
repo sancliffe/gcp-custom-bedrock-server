@@ -49,7 +49,7 @@ RUN set -eu; \
             exit 1 ;; \
     esac; \
     \
-    BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${RESOLVED_VERSION}.zip"; \
+    BDS_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${RESOLVED_VERSION}.zip"; \
     echo "Downloading Bedrock Dedicated Server version ${RESOLVED_VERSION} from ${BDS_URL}"; \
     curl --fail --show-error --silent --location --http1.1 \
         --retry 3 \
