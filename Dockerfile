@@ -9,13 +9,14 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Build arguments for pinned version reproducibility (defaults to latest if unset)
 ARG BDS_VERSION=latest
 
-# Install runtime dependencies required by Mojang's native Bedrock binary
+# Install runtime dependencies and netcat for container healthchecks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
     libcurl4 \
     libssl3 \
     ca-certificates \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a dedicated non-root system user and group for security hardening
@@ -27,7 +28,6 @@ RUN mkdir -p /opt/minecraft/server /data && \
     chown -R minecraft:minecraft /opt/minecraft /data
 
 # Download and extract the official Linux Bedrock Dedicated Server binary
-# If BDS_VERSION is 'latest', scrape the official download page; otherwise use the pinned version URL
 RUN if [ "${BDS_VERSION}" = "latest" ]; then \
         BDS_URL=$(curl -s -H "Accept-Encoding: identity" -H "User-Agent: Mozilla/5.0" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1); \
     else \
@@ -37,6 +37,10 @@ RUN if [ "${BDS_VERSION}" = "latest" ]; then \
     && curl -s -H "User-Agent: Mozilla/5.0" -o /tmp/bedrock-server.zip "${BDS_URL}" \
     && unzip /tmp/bedrock-server.zip -d /opt/minecraft/server \
     && rm /tmp/bedrock-server.zip
+
+# Copy configuration templates safely
+COPY server.properties /opt/minecraft/server/server.properties
+RUN echo '[]' > /opt/minecraft/server/allowlist.json
 
 # Copy entrypoint script and set executable permissions
 COPY start.sh /opt/minecraft/start.sh
