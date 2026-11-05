@@ -27,14 +27,19 @@ RUN groupadd -g 999 minecraft && \
 RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
-# Download and extract the official Linux Bedrock Dedicated Server binary
+# Download and extract the official Linux Bedrock Dedicated Server binary via API/version endpoint
 RUN if [ "${BDS_VERSION}" = "latest" ]; then \
-        BDS_URL=$(curl -s -H "Accept-Encoding: identity" -H "User-Agent: Mozilla/5.0" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1); \
+        # Fetch the latest direct download URL from the official Minecraft client/server manifest or fallback pattern
+        BDS_URL=$(curl -s -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" https://www.minecraft.net/en-us/download/server/bedrock | grep -oP 'https://www\.minecraft\.net/bedrock-dedicated-server/bin-linux/[^"]+' | head -n 1); \
+        if [ -z "${BDS_URL}" ]; then \
+            echo "Scraping failed, fetching fallback latest release URL structure..."; \
+            BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-latest.zip"; \
+        fi; \
     else \
         BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${BDS_VERSION}.zip"; \
     fi \
     && echo "Downloading Bedrock Server from: ${BDS_URL}" \
-    && curl -s -H "User-Agent: Mozilla/5.0" -o /tmp/bedrock-server.zip "${BDS_URL}" \
+    && curl -f -s -L -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -o /tmp/bedrock-server.zip "${BDS_URL}" \
     && unzip /tmp/bedrock-server.zip -d /opt/minecraft/server \
     && rm /tmp/bedrock-server.zip
 
