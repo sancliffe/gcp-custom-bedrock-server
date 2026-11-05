@@ -9,7 +9,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Pin the Bedrock Dedicated Server version for reproducible builds.
 # Update this value deliberately when upgrading the server.
-ARG BDS_VERSION=1.26.52.3
+ARG BDS_VERSION=1.21.50.01
 
 # Runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,17 +38,15 @@ RUN groupadd --system --gid 999 minecraft && \
 RUN mkdir -p /opt/minecraft/server /data && \
     chown -R 999:999 /opt/minecraft /data
 
-# Download and install the pinned official Bedrock Dedicated Server archive.
-# Mojang's current download page does not expose a stable, scrapeable direct
-# URL in its server-rendered HTML, so avoid fragile "latest" page scraping.
+# Download and extract the official Linux Bedrock Dedicated Server binary with a pinned version argument
 RUN set -eu; \
     case "${BDS_VERSION}" in \
         ""|*[!0-9.]*|.*|*.) \
-            echo "ERROR: BDS_VERSION must be a numeric version such as 1.26.52.3"; \
+            echo "ERROR: BDS_VERSION must be a numeric version such as 1.21.50.01"; \
             exit 1 ;; \
     esac; \
-    BDS_URL="https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-${BDS_VERSION}.zip"; \
-    echo "Downloading Bedrock Dedicated Server ${BDS_VERSION}"; \
+    BDS_URL="https://www.minecraft.net/bedrock-dedicated-server/bin-linux/bedrock-server-${BDS_VERSION}.zip"; \
+    echo "Downloading Bedrock Dedicated Server ${BDS_VERSION} from ${BDS_URL}"; \
     curl --fail --show-error --silent --location \
         --retry 3 \
         --connect-timeout 15 \
